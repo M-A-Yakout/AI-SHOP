@@ -20,6 +20,7 @@ class Store(models.Model):
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=250, unique=True)
     description = models.TextField(blank=True, null=True)
+    tagline = models.CharField(max_length=200, blank=True, null=True)
     logo = models.ImageField(upload_to='stores/logos/', blank=True, null=True)
     banner = models.ImageField(upload_to='stores/banners/', blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')

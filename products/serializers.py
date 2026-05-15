@@ -48,6 +48,7 @@ class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     brand_name = serializers.CharField(source='brand.name', read_only=True)
     store_name = serializers.CharField(source='store.name', read_only=True)
+    stock_quantity = serializers.IntegerField(source='quantity', read_only=True)
     
     class Meta:
         model = Product
@@ -55,8 +56,8 @@ class ProductSerializer(serializers.ModelSerializer):
             'id', 'store', 'store_name', 'category', 'category_name', 
             'brand', 'brand_name', 'name', 'slug', 'description', 
             'short_description', 'price', 'compare_price', 'cost_price',
-            'sku', 'barcode', 'quantity', 'weight', 'status', 'is_featured',
+            'sku', 'barcode', 'quantity', 'stock_quantity', 'weight', 'status', 'is_featured',
             'tags', 'meta_title', 'meta_description', 'images',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'slug', 'stock_quantity', 'created_at', 'updated_at']

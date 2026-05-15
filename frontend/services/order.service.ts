@@ -35,4 +35,13 @@ export const orderService = {
       throw handleApiError(error);
     }
   },
+
+  async updateOrder(id: number, data: Partial<Order>): Promise<Order> {
+    try {
+      const response = await apiClient.patch<Order>(`/orders/${id}/`, data);
+      return response.data;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
 };

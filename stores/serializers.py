@@ -16,9 +16,9 @@ class StoreSerializer(serializers.ModelSerializer):
             'id', 'owner', 'owner_name', 'name', 'slug', 'description',
             'logo', 'banner', 'status', 'email', 'phone', 'address',
             'city', 'country', 'postal_code', 'website', 'products_count',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'tagline'
         ]
-        read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'owner', 'slug', 'created_at', 'updated_at']
     
     def validate_name(self, value):
         if Store.objects.filter(name__iexact=value).exists():
@@ -33,7 +33,7 @@ class StoreCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Store
-        fields = ['name', 'description', 'logo', 'banner', 'email', 'phone', 
+        fields = ['name', 'description', 'tagline', 'logo', 'banner', 'email', 'phone', 
                  'address', 'city', 'country', 'postal_code', 'website']
     
     def create(self, validated_data):

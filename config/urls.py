@@ -5,9 +5,32 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import JsonResponse
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+
+def api_root(request):
+    """Root endpoint showing available API endpoints"""
+    return JsonResponse({
+        'message': 'Welcome to AI Ecommerce Marketplace API',
+        'version': '1.0.0',
+        'endpoints': {
+            'admin': '/admin/',
+            'api_documentation': '/api/docs/',
+            'api_schema': '/api/schema/',
+            'authentication': '/api/auth/',
+            'stores': '/api/stores/',
+            'products': '/api/products/',
+            'orders': '/api/orders/',
+            'ai_assistant': '/api/ai/',
+            'news': '/api/news/',
+        }
+    })
+
 urlpatterns = [
+    # Root endpoint
+    path('', api_root, name='api-root'),
+    
     # Admin
     path('admin/', admin.site.urls),
     

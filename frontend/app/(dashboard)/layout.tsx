@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { authService } from "@/services/auth.service";
 import Sidebar from "@/components/layout/Sidebar";
 import Navbar from "@/components/layout/Navbar";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 export default function DashboardLayout({
   children,
@@ -14,6 +20,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const { user, setUser, setLoading, isLoading } = useAuthStore();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -47,10 +54,24 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar />
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:block">
+        <Sidebar />
+      </aside>
+
+      {/* Mobile Sidebar */}
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetContent side="left" className="p-0 w-64">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Navigation Menu</SheetTitle>
+          </SheetHeader>
+          <Sidebar onLinkClick={() => setMobileMenuOpen(false)} />
+        </SheetContent>
+      </Sheet>
+
       <div className="flex flex-col flex-1 overflow-hidden">
-        <Navbar />
-        <main className="flex-1 overflow-y-auto bg-muted/50 p-6">
+        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
+        <main className="flex-1 overflow-y-auto bg-muted/50 p-4 md:p-6">
           {children}
         </main>
       </div>

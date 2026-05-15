@@ -106,6 +106,12 @@ export default function ShopPage() {
               <span className="text-xl font-bold">AI Shop</span>
             </Link>
             <div className="flex items-center gap-4">
+              <Link href="/shop/cart">
+                <Button variant="outline" className="relative">
+                  <ShoppingBag className="h-5 w-5 mr-2" />
+                  Cart
+                </Button>
+              </Link>
               <Link href="/login">
                 <Button variant="outline">Seller Login</Button>
               </Link>
@@ -181,49 +187,74 @@ export default function ShopPage() {
             </div>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredProducts.map((product: any) => (
-                <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="aspect-square bg-muted flex items-center justify-center">
-                    {product.images && product.images.length > 0 ? (
-                      <img
-                        src={product.images[0].image}
-                        alt={product.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <ShoppingBag className="h-12 w-12 text-muted-foreground" />
-                    )}
-                  </div>
-                  <CardHeader>
-                    <div className="space-y-2">
-                      <CardTitle className="line-clamp-2 text-base">
-                        {product.name}
-                      </CardTitle>
-                      {product.category && (
-                        <Badge variant="secondary" className="text-xs">
-                          {product.category.name}
-                        </Badge>
+                <Link key={product.id} href={`/shop/${product.slug}`}>
+                  <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer h-full">
+                    <div className="aspect-square bg-muted flex items-center justify-center relative">
+                      {product.images && product.images.length > 0 ? (
+                        <img
+                          src={product.images[0].image}
+                          alt={product.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <ShoppingBag className="h-12 w-12 text-muted-foreground" />
+                      )}
+                      {/* Stock Badge */}
+                      {product.stock_quantity === 0 && (
+                        <div className="absolute top-2 right-2">
+                          <Badge variant="destructive">Out of Stock</Badge>
+                        </div>
+                      )}
+                      {product.stock_quantity > 0 && product.stock_quantity <= 5 && (
+                        <div className="absolute top-2 right-2">
+                          <Badge className="bg-orange-600">Low Stock</Badge>
+                        </div>
                       )}
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {product.short_description || product.description}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xl font-bold">{formatPrice(product.price)}</p>
-                          {product.compare_price && parseFloat(product.compare_price) > parseFloat(product.price) && (
-                            <p className="text-xs text-muted-foreground line-through">
-                              {formatPrice(product.compare_price)}
-                            </p>
-                          )}
-                        </div>
-                        <Button size="sm">View</Button>
+                    <CardHeader>
+                      <div className="space-y-2">
+                        <CardTitle className="line-clamp-2 text-base">
+                          {product.name}
+                        </CardTitle>
+                        {product.category && (
+                          <Badge variant="secondary" className="text-xs">
+                            {product.category.name}
+                          </Badge>
+                        )}
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {product.short_description || product.description}
+                        </p>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xl font-bold">{formatPrice(product.price)}</p>
+                              {product.compare_price && parseFloat(product.compare_price) > parseFloat(product.price) && (
+                                <p className="text-xs text-muted-foreground line-through">
+                                  {formatPrice(product.compare_price)}
+                                </p>
+                              )}
+                            </div>
+                            <Button size="sm" onClick={(e) => e.preventDefault()}>View</Button>
+                          </div>
+                          {/* Stock Info */}
+                          <div className="text-xs text-muted-foreground">
+                            {product.stock_quantity > 0 ? (
+                              <span className={product.stock_quantity <= 5 ? "text-orange-600" : "text-green-600"}>
+                                {product.stock_quantity} in stock
+                              </span>
+                            ) : (
+                              <span className="text-red-600">Out of stock</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
             </div>
           </>
