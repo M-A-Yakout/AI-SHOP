@@ -32,39 +32,98 @@ export default function AIPage() {
     if (!input.trim() || loading) return;
 
     const userMessage = input.trim();
+    
+    // Validate input length
+    if (userMessage.length < 3) {
+      toast({
+        title: "Input too short",
+        description: "Please describe your store with at least 3 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setLoading(true);
 
     try {
-      // Add loading message
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "⚙️ Creating your store...\n\nPlease wait while I:\n✓ Generate store structure\n✓ Create categories\n✓ Generate products\n✓ Set up everything for you",
-        },
-      ]);
+      // Determine request type based on keywords
+      const lowerInput = userMessage.toLowerCase();
+      // Search: ابحث، بحث، ما، ايه، find, search, look for, show me, كتب، books، kindle، أفضل، best، better، top، بيع
+      const isSearch = /ابحث|بحث|search|find|look for|show me|كتب|books|kindle|أفضل|best|better|top|جيد|good|قم بالبحث|ابحث لي|ما هي|what is|what are|какие|лучшие|книги|русском/.test(lowerInput);
+      // Recommendations: أنصح، انصح، recommend, اقترح، توص، نصيحة، اقتراح، suggest، advice
+      const isRecommendation = /أنصح|انصح|recommend|اقترح|توص|نصيحة|اقتراح|suggest|advice|أنصحك|انصحك|recommendation/.test(lowerInput);
+      // Product names: أسماء، names، منتجات، products، أفكار، ideas، suggestions، product names، اسم
+      const isProductGeneration = /أسماء|names|منتج|product|أفكار|ideas|suggestion|اسم|naming/.test(lowerInput);
+      // Store: متجر، store، محل، shop، بيع، sell، عمل، اريد، أريد، أنشئ، أنشيء، create
+      const isStore = /متجر|store|محل|shop|عمل|بيع|sell|اريد|أريد|أنشئ|أنشيء|create|want to create|want a|want an/.test(lowerInput);
 
-      // Call AI service to create automated store
-      const response = await aiService.createAutomatedStore(userMessage);
+      let response;
+      let loadingMsg = "";
 
-      // Remove loading message and add success message
+      if (isSearch || isRecommendation) {
+        // Search or Recommendation request
+        loadingMsg = "🔍 Searching and analyzing...\n\nLooking for the best options for you...";
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: loadingMsg },
+        ]);
+        response = await aiService.searchAndRecommend(userMessage);
+      } else if (isProductGeneration) {
+        // Product name generation
+        loadingMsg = "🏷️ Generating product names...\n\nCreating creative product names for you...";
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: loadingMsg },
+        ]);
+        response = await aiService.generateProductNames(userMessage);
+      } else {
+        // Default: Create store
+        loadingMsg = "⚙️ Creating your store...\n\nPlease wait while I:\n✓ Generate store structure\n✓ Create categories\n✓ Generate products\n✓ Set up everything for you";
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: loadingMsg },
+        ]);
+        response = await aiService.generateStore(userMessage);
+      }
+
+      // Remove loading message and add success message based on response type
       setMessages((prev) => {
         const withoutLoading = prev.slice(0, -1);
+        let successMessage = "";
+
+        if (response.type === "product_names") {
+          // Format product names response
+          successMessage = `🏷️ ${response.message}\n\n**Generated Product Names:**\n${response.product_names.map((name: string) => `✓ ${name}`).join("\n")}\n\nThese names would work great for your store! Ready to create a store with these products?`;
+        } else if (response.type === "search_and_recommend") {
+          // Format search/recommendation response
+          successMessage = `🔍 ${response.ai_response || response.message}\n\n**Matching Products:** ${response.products_count} found\n\nWould you like more details about any product?`;
+        } else {
+          // Format store creation response (default)
+          successMessage = `🎉 ${response.message}\n\n**Store Details:**\n• Name: ${response.store?.name || "Your Store"}\n• Products: ${response.summary?.total_products || response.products?.length || 0}\n• Categories: ${response.summary?.total_categories || response.categories?.length || 0}\n• Status: ${response.store?.status || "Created"}\n\n**What's been created:**\n${response.categories?.map((cat: any) => `✓ ${cat.name}`).join("\n") || "✓ Store structure created"}\n\n${response.products?.slice(0, 3).map((prod: any) => `✓ ${prod.name} - $${prod.price}`).join("\n") || ""}\n${response.products && response.products.length > 3 ? `\n...and ${response.products.length - 3} more products!` : ""}\n\nYour store is ready to go! Would you like to:\n• View your store\n• Add more products\n• Customize products`;
+        }
+
         return [
           ...withoutLoading,
           {
             role: "assistant",
-            content: `🎉 ${response.message}\n\n**Store Details:**\n• Name: ${response.store.name}\n• Products: ${response.summary.total_products}\n• Categories: ${response.summary.total_categories}\n• Status: ${response.store.status}\n\n**What's been created:**\n${response.categories.map((cat: any) => `✓ ${cat.name}`).join("\n")}\n\n${response.products.slice(0, 3).map((prod: any) => `✓ ${prod.name} - $${prod.price}`).join("\n")}\n${response.products.length > 3 ? `\n...and ${response.products.length - 3} more products!` : ""}\n\nYour store is ready to go! Would you like to:\n• View your store\n• Add more products\n• Customize products`,
+            content: successMessage,
             data: response,
           },
         ];
       });
 
+      // Show appropriate success message
+      const successMsg = response.type === "product_names" 
+        ? `Generated ${response.count || 10} product names`
+        : response.type === "search_and_recommend"
+        ? `Found ${response.products_count || 0} products`
+        : `Store "${response.store?.name || "Your Store"}" created successfully!`;
+
       toast({
         title: "Success!",
-        description: `Store "${response.store.name}" created successfully!`,
+        description: successMsg,
       });
     } catch (error: any) {
       setMessages((prev) => {
@@ -73,7 +132,7 @@ export default function AIPage() {
           ...withoutLoading,
           {
             role: "assistant",
-            content: `❌ Oops! Something went wrong: ${error.message}\n\nPlease try again with a different description.`,
+            content: `❌ Oops! Something went wrong: ${error.message}\n\n💡 Tips:\n• Use at least 3 characters\n• Try describing the store type (e.g., "organic coffee shop")\n• Be specific about your business idea`,
           },
         ];
       });
@@ -161,20 +220,33 @@ export default function AIPage() {
             </div>
 
             {/* Input */}
-            <form onSubmit={handleSubmit} className="flex gap-2">
+            <form onSubmit={handleSubmit} className="space-y-2">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Describe your store idea..."
+                placeholder="Describe your store idea (at least 3 characters)..."
                 disabled={loading}
               />
-              <Button type="submit" disabled={loading}>
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {input.length < 3 ? (
+                    <>Character count: {input.length}/3 (minimum)</>
+                  ) : (
+                    <>✓ Ready to submit</>
+                  )}
+                </span>
+                <Button 
+                  type="submit" 
+                  disabled={loading || input.trim().length < 3}
+                  className="ml-auto"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>

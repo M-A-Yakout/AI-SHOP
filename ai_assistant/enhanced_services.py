@@ -38,26 +38,9 @@ class LanguageService:
             'ru': 'Russian',
             'hi': 'Hindi',
         }
-        self.langdetect_available = False
-        self.translation_available = False
-        
-        try:
-            import langdetect
-            self.langdetect_available = True
-        except ImportError:
-            logger.info("langdetect not installed, language detection disabled")
-        
-        try:
-            from google.cloud import translate_v2
-            self.translation_available = True
-        except ImportError:
-            logger.info("google-cloud-translate not installed, translation disabled")
     
     def detect_language(self, text: str) -> str:
         """Detect language of input text"""
-        if not self.langdetect_available:
-            return 'en'
-        
         try:
             from langdetect import detect
             lang = detect(text)
@@ -70,10 +53,6 @@ class LanguageService:
     def translate_text(self, text: str, target_language: str) -> str:
         """Translate text to target language"""
         if target_language == 'en':
-            return text
-        
-        if not self.translation_available:
-            logger.warning("Translation not available, returning original text")
             return text
         
         try:
@@ -91,13 +70,6 @@ class WebSearchService:
     
     def __init__(self):
         self.cache_duration = 86400  # 24 hours
-        self.duckduckgo_available = False
-        
-        try:
-            import duckduckgo_search
-            self.duckduckgo_available = True
-        except ImportError:
-            logger.info("duckduckgo-search not installed, web search disabled")
     
     def search(self, query: str, language: str = 'en', use_cache: bool = True) -> List[Dict[str, Any]]:
         """
@@ -111,12 +83,10 @@ class WebSearchService:
                 logger.info(f"Using cached search results for: {query}")
                 return cached
         
-        if not self.duckduckgo_available:
-            logger.warning("Web search not available, returning empty results")
-            return []
-        
         try:
             from duckduckgo_search import DDGS
+            import requests
+            from bs4 import BeautifulSoup
             
             ddgs = DDGS()
             results = []
@@ -281,46 +251,24 @@ class EnhancedAIService:
             self.language_service, self.web_service
         )
         
-        # Create conversation service (works with or without client)
-        self.conversation_service = ConversationService(
-            self.client, self.language_service
-        )
-        
         # Try to initialize Groq client if not in mock mode
         if not self.mock_mode and settings.GROQ_API_KEY:
             try:
                 from groq import Groq
-                import os
-                
-                # Clean ALL proxy environment variables
-                proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy']
-                old_proxies = {}
-                for var in proxy_vars:
-                    old_proxies[var] = os.environ.pop(var, None)
-                
-                try:
-                    # Create Groq client with just API key
-                    self.client = Groq(api_key=settings.GROQ_API_KEY)
-                    # Update conversation service with client
-                    self.conversation_service.client = self.client
-                    logger.info("✅ Groq AI Service initialized successfully!")
-                finally:
-                    # Restore proxy environment variables
-                    for var, val in old_proxies.items():
-                        if val is not None:
-                            os.environ[var] = val
-                        
+                self.client = Groq(api_key=settings.GROQ_API_KEY)
+                self.conversation_service = ConversationService(
+                    self.client, self.language_service
+                )
+                logger.info("Enhanced AI Service initialized successfully")
             except ImportError as e:
                 logger.warning(f"Groq package not available: {e}. Falling back to mock mode.")
                 self.mock_mode = True
             except Exception as e:
-                logger.error(f"Failed to initialize Groq client: {e}", exc_info=True)
+                logger.error(f"Failed to initialize AI service: {e}")
                 self.mock_mode = True
         else:
-            if self.mock_mode:
-                logger.info("Running in mock mode (AI_MOCK_MODE=True)")
-            else:
-                logger.warning("Running in mock mode (No GROQ_API_KEY configured)")
+            logger.info("Running in mock mode")
+            self.mock_mode = True
     
     def chat(self, session: ConversationSession, user_message: str, user=None) -> Dict[str, Any]:
         """
@@ -591,281 +539,4 @@ Provide JSON with: improved_title, seo_description, category_suggestions, tags, 
 # Backward compatibility
 class AIService(EnhancedAIService):
     """Maintain backward compatibility with existing code"""
-    
-    def store_generator(self, store_idea: str, user=None) -> Dict[str, Any]:
-        """
-        Generate complete store structure from an idea - MUST use real Groq AI
-        
-        Args:
-            store_idea: Store concept (e.g., "organic coffee shop")
-            user: Django user object
-            
-        Returns:
-            Dictionary with store details, categories, and 50+ real products from AI
-            
-        Raises:
-            AIServiceError: If Groq AI is not available
-        """
-        if self.mock_mode or not self.client:
-            raise AIServiceError("Groq AI Service required for store generation. Configure GROQ_API_KEY.")
-        
-        try:
-            return self._groq_store_generator(store_idea)
-        except Exception as e:
-            logger.error(f"Store generation failed: {e}", exc_info=True)
-            raise AIServiceError(f"Failed to generate store: {e}")
-    
-    def _groq_store_generator(self, store_idea: str) -> Dict[str, Any]:
-        """Generate store structure using Groq API with 50+ REAL products"""
-        import time
-        import json
-        start_time = time.time()
-        
-        prompt = f"""You are an expert ecommerce business analyst and product data specialist.
-Given this store idea: "{store_idea}"
-
-Generate a COMPLETE store structure with 50 REAL, market-ready products.
-
-Return ONLY valid JSON (no markdown, no code blocks):
-{{
-  "store": {{
-    "name": "Creative store name for: {store_idea}",
-    "description": "Professional store description (2-3 sentences)",
-    "tagline": "Catchy tagline for the store"
-  }},
-  "categories": [
-    {{"name": "Category 1", "description": "Description"}},
-    {{"name": "Category 2", "description": "Description"}},
-    {{"name": "Category 3", "description": "Description"}}
-  ],
-  "sample_products": [
-    {{"name": "REAL Product Name", "description": "Specific product description", "category": "Category X", "price": 29.99}},
-    ... 50 products total
-  ]
-}}
-
-CRITICAL REQUIREMENTS:
-1. Generate EXACTLY 50 products
-2. Each product must be REAL and currently available in the market
-3. Names must be specific, professional brand names (not generic)
-4. Prices must be realistic for the product type
-5. Distribute products evenly across the 3 categories
-6. Include variety: different brands, models, price points
-7. Descriptions must be concise but informative
-8. NO duplicates or similar products
-
-Products should cover:
-- Different price tiers ($10-$100+ range)
-- Multiple brands/models
-- Realistic market data
-- Current product availability
-
-RETURN ONLY THE JSON. NO OTHER TEXT."""
-
-        try:
-            response = self.client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a product database expert. Generate REAL, market-ready product data. Return ONLY valid JSON array."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.85,
-                max_tokens=7000
-            )
-            
-            content = response.choices[0].message.content.strip()
-            
-            # Clean markdown formatting if present
-            if content.startswith('```'):
-                content = content.split('```')[1]
-                if content.startswith('json'):
-                    content = content[4:]
-            content = content.strip()
-            
-            # Parse JSON response
-            result = json.loads(content)
-            
-            # Validate structure
-            if 'store' not in result or 'categories' not in result or 'sample_products' not in result:
-                raise ValueError("Invalid response structure")
-            
-            # Ensure we have products
-            if not result['sample_products']:
-                raise ValueError("No products generated")
-            
-            # Validate and clean products
-            validated_products = []
-            for prod in result['sample_products'][:50]:
-                try:
-                    validated_products.append({
-                        'name': str(prod.get('name', 'Product'))[:200].strip(),
-                        'description': str(prod.get('description', ''))[:500].strip(),
-                        'category': str(prod.get('category', result['categories'][0]['name'] if result['categories'] else 'General'))[:100],
-                        'price': float(prod.get('price', 29.99))
-                    })
-                except:
-                    continue
-            
-            result['sample_products'] = validated_products
-            
-            processing_time = time.time() - start_time
-            result['tokens_used'] = response.usage.total_tokens
-            result['mode'] = 'groq'
-            result['processing_time'] = round(processing_time, 2)
-            
-            logger.info(f"✅ Generated store: {result['store']['name']} with {len(validated_products)} products")
-            return result
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parsing error: {e}")
-            raise AIServiceError(f"Failed to parse AI response as JSON: {e}")
-        except Exception as e:
-            logger.error(f"Groq store generation failed: {e}", exc_info=True)
-            raise AIServiceError(f"Store generation failed: {e}")
-        
-        try:
-            response = self.client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are an expert ecommerce architect. Return valid JSON only."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.8,
-                max_tokens=1200
-            )
-            
-            content = response.choices[0].message.content
-            
-            # Parse JSON response
-            result = json.loads(content)
-            
-            # Validate required fields
-            required_fields = ['store', 'categories', 'sample_products']
-            if not all(field in result for field in required_fields):
-                raise ValueError("Missing required fields in AI response")
-            
-            # Ensure store has required fields
-            if not all(k in result['store'] for k in ['name', 'description', 'tagline']):
-                raise ValueError("Store object missing required fields")
-            
-            # Ensure categories have required fields
-            for cat in result['categories']:
-                if not all(k in cat for k in ['name', 'description']):
-                    raise ValueError("Category missing required fields")
-            
-            # Ensure products have required fields
-            for prod in result['sample_products']:
-                if not all(k in prod for k in ['name', 'description', 'category', 'price']):
-                    raise ValueError("Product missing required fields")
-            
-            result['tokens_used'] = response.usage.total_tokens
-            result['mode'] = 'groq'
-            result['processing_time'] = time.time() - start_time
-            
-            return result
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from Groq response: {e}")
-            raise AIServiceError(f"Invalid JSON response from AI: {e}")
-        except Exception as e:
-            logger.error(f"Groq store generation failed: {e}")
-            raise AIServiceError(f"Store generation failed: {e}")
-    
-    def _mock_store_generator(self, store_idea: str) -> Dict[str, Any]:
-        """Generate store structure using mock data"""
-        import time
-        start_time = time.time()
-        
-        # Generate mock store based on idea keywords
-        ideas_lower = store_idea.lower()
-        
-        # Mock store templates
-        store_templates = {
-            'coffee': {
-                'store': {
-                    'name': 'Premium Coffee House',
-                    'description': 'Your destination for finest specialty coffee and premium blends',
-                    'tagline': 'Brew excellence, one cup at a time'
-                },
-                'categories': [
-                    {'name': 'Single Origin Beans', 'description': 'Premium single origin coffee beans'},
-                    {'name': 'Coffee Equipment', 'description': 'Grinders, brewers, and accessories'},
-                    {'name': 'Coffee Accessories', 'description': 'Mugs, filters, and supplies'}
-                ],
-                'sample_products': [
-                    {'name': 'Ethiopian Yirgacheffe Beans', 'description': 'Light roast with floral notes', 'category': 'Single Origin Beans', 'price': 14.99},
-                    {'name': 'Burr Coffee Grinder Pro', 'description': 'Precision burr grinder for espresso', 'category': 'Coffee Equipment', 'price': 129.99},
-                    {'name': 'Ceramic Coffee Mug Set', 'description': 'Set of 4 artisan ceramic mugs', 'category': 'Coffee Accessories', 'price': 24.99},
-                ]
-            },
-            'organic': {
-                'store': {
-                    'name': 'Organic Essentials',
-                    'description': 'Natural and organic products for healthy living',
-                    'tagline': 'Pure nature, pure wellness'
-                },
-                'categories': [
-                    {'name': 'Organic Foods', 'description': 'Certified organic food products'},
-                    {'name': 'Natural Skincare', 'description': 'Natural and organic beauty products'},
-                    {'name': 'Wellness Supplements', 'description': 'Natural health supplements'}
-                ],
-                'sample_products': [
-                    {'name': 'Organic Green Tea', 'description': 'Pure organic green tea leaves', 'category': 'Organic Foods', 'price': 12.99},
-                    {'name': 'Aloe Vera Face Cream', 'description': 'Natural aloe vera skincare cream', 'category': 'Natural Skincare', 'price': 18.99},
-                    {'name': 'Vitamin D3 Supplement', 'description': 'Natural vitamin D supplement', 'category': 'Wellness Supplements', 'price': 14.99},
-                ]
-            },
-            'electronics': {
-                'store': {
-                    'name': 'TechHub Pro',
-                    'description': 'Latest technology and gadgets',
-                    'tagline': 'Innovation at your fingertips'
-                },
-                'categories': [
-                    {'name': 'Smartphones', 'description': 'Latest smartphone models'},
-                    {'name': 'Accessories', 'description': 'Phone cases, chargers, and more'},
-                    {'name': 'Audio', 'description': 'Headphones and speakers'}
-                ],
-                'sample_products': [
-                    {'name': 'Premium Phone Case', 'description': 'Protective TPU phone case', 'category': 'Accessories', 'price': 24.99},
-                    {'name': 'Wireless Charger', 'description': '15W Qi wireless charger', 'category': 'Accessories', 'price': 34.99},
-                    {'name': 'Bluetooth Headphones', 'description': 'Premium noise-canceling headphones', 'category': 'Audio', 'price': 79.99},
-                ]
-            },
-        }
-        
-        # Find matching template
-        selected_template = None
-        for keyword, template in store_templates.items():
-            if keyword in ideas_lower:
-                selected_template = template
-                break
-        
-        # Use default template if no match
-        if not selected_template:
-            selected_template = {
-                'store': {
-                    'name': f'{store_idea.title()} Store',
-                    'description': f'Premium destination for {store_idea.lower()}',
-                    'tagline': f'Quality {store_idea.lower()} for everyone'
-                },
-                'categories': [
-                    {'name': 'Featured Items', 'description': f'Our best {store_idea.lower()} selections'},
-                    {'name': 'New Arrivals', 'description': f'Latest {store_idea.lower()} products'},
-                    {'name': 'Best Sellers', 'description': f'Customer favorites in {store_idea.lower()}'}
-                ],
-                'sample_products': [
-                    {'name': f'Premium {store_idea} Product', 'description': f'High-quality {store_idea.lower()} item', 'category': 'Featured Items', 'price': 49.99},
-                    {'name': f'Exclusive {store_idea} Offer', 'description': f'Limited edition {store_idea.lower()}', 'category': 'New Arrivals', 'price': 59.99},
-                    {'name': f'Popular {store_idea} Choice', 'description': f'Customer favorite {store_idea.lower()}', 'category': 'Best Sellers', 'price': 39.99},
-                ]
-            }
-        
-        selected_template['tokens_used'] = 0
-        selected_template['mode'] = 'mock'
-        selected_template['processing_time'] = time.time() - start_time
-        
-        return selected_template
+    pass

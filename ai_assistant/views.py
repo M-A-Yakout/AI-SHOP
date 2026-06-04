@@ -3,6 +3,7 @@ AI Assistant views with comprehensive error handling
 """
 import logging
 from django.db import models
+from django.conf import settings
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -374,10 +375,16 @@ def create_automated_store(request):
     - "sports equipment"
     - "pet supplies"
     """
+    # Log incoming request for debugging
+    logger.info(f"🔍 DEBUG: Incoming request data: {request.data}")
+    logger.info(f"🔍 DEBUG: Request user: {request.user} (Authenticated: {request.user.is_authenticated})")
+    logger.info(f"🔍 DEBUG: Request headers: {dict(request.headers)}")
+    
     # Validate input
     serializer = AutomatedStoreRequestSerializer(data=request.data)
     if not serializer.is_valid():
-        logger.warning(f"Invalid automated store request: {serializer.errors}")
+        logger.warning(f"❌ Invalid automated store request: {serializer.errors}")
+        logger.warning(f"🔍 DEBUG: Serializer errors detail: {serializer.errors}")
         return Response(
             {
                 'error': 'Invalid input',
@@ -560,6 +567,254 @@ Provide a friendly, helpful response (2-3 sentences) recommending the best produ
         return Response(
             {
                 'error': 'Search failed',
+                'message': str(e),
+                'success': False
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@extend_schema(
+    tags=['AI Assistant - Intent Based'],
+    description='🔍 Search and provide product recommendations based on user query'
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def search_and_recommend(request):
+    """
+    Search for products and provide realistic AI recommendations
+    """
+    from products.models import Product
+    from products.serializers import ProductSerializer
+    from django.db.models import Q
+    
+    query = request.data.get('query', '').strip()
+    
+    if not query or len(query) < 3:
+        return Response(
+            {
+                'error': 'Query must be at least 3 characters',
+                'success': False
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        ai_service = AIService()
+        
+        # Extract keywords for search
+        keywords = query.lower().split()
+        q_objects = Q()
+        for keyword in keywords:
+            q_objects |= Q(name__icontains=keyword)
+            q_objects |= Q(description__icontains=keyword)
+            q_objects |= Q(category__name__icontains=keyword)
+        
+        # Search products - search ALL products in database, not just first 10
+        all_products = Product.objects.filter(
+            q_objects,
+            status='published'
+        ).select_related('category').distinct()
+        
+        # Prioritize by relevance: exact name match first, then description, then category
+        # Use keywords for exact matching, not the full query
+        exact_matches = Q()
+        for keyword in keywords:
+            exact_matches |= Q(name__icontains=keyword)
+        exact_matches_qs = all_products.filter(exact_matches)
+        
+        desc_matches_qs = all_products.exclude(id__in=exact_matches_qs)
+        
+        # Combine: exact first, then others - take best matches
+        combined = list(exact_matches_qs[:25]) + list(desc_matches_qs[:25])
+        products = combined[:50]  # Return best 50 matches instead of just 10
+        
+        serializer = ProductSerializer(products, many=True)
+        
+        # Get AI response - MUST use Groq AI, no templates
+        if ai_service.mock_mode or not ai_service.client:
+            logger.error("Groq AI not available. Configure GROQ_API_KEY environment variable.")
+            return Response(
+                {
+                    'error': 'AI Service Unavailable',
+                    'message': 'Please configure GROQ_API_KEY environment variable to use this feature',
+                    'success': False
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        try:
+            # Build product context for AI
+            product_summary = ""
+            if len(products) > 0:
+                for idx, prod in enumerate(products[:5], 1):
+                    product_summary += f"\n{idx}. {prod.name} (${prod.price}) - {prod.short_description or 'Quality product'}"
+            
+            # Prompt for REAL AI responses
+            prompt = f"""You are an expert ecommerce assistant. A customer searched for: "{query}"
+
+{f"Available products: {product_summary}" if product_summary else "No products matched in catalog."}
+
+Total products found: {len(products)}
+
+Provide a helpful, natural response that:
+1. Addresses the customer's search
+2. Mentions the number of products found
+3. Gives honest recommendations based on the products
+4. Is 2-3 sentences, warm and professional
+
+Respond in the same language as the query. Be real and authentic, not generic."""
+
+            response = ai_service.client.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are an authentic ecommerce expert. Provide real, helpful recommendations without templates or generic phrases. Be conversational and genuine."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=400
+            )
+            ai_response = response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Groq AI response generation failed: {e}")
+            raise
+        
+        return Response({
+            'success': True,
+            'type': 'search_and_recommend',
+            'query': query,
+            'ai_response': ai_response,
+            'products_count': len(products),
+            'products': serializer.data,
+            'message': f'Found {len(products)} products'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error in search and recommend: {e}", exc_info=True)
+        return Response(
+            {
+                'error': 'Search failed',
+                'message': str(e),
+                'success': False
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@extend_schema(
+    tags=['AI Assistant - Intent Based'],
+    description='🏷️ Generate creative product names based on store or category idea'
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_product_names(request):
+    """
+    Generate realistic product names using AI with industry-standard patterns
+    """
+    idea = request.data.get('idea', '').strip()
+    
+    if not idea or len(idea) < 3:
+        return Response(
+            {
+                'error': 'Idea must be at least 3 characters',
+                'success': False
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        ai_service = AIService()
+        product_names = []
+        
+        # Get AI-generated names - MUST use Groq AI
+        if ai_service.mock_mode or not ai_service.client:
+            logger.error("Groq AI not available. Configure GROQ_API_KEY environment variable.")
+            return Response(
+                {
+                    'error': 'AI Service Unavailable',
+                    'message': 'Please configure GROQ_API_KEY environment variable to use this feature',
+                    'success': False
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        try:
+            # Prompt for REAL AI product naming
+            prompt = f"""Generate 10 creative, realistic product names for: {idea}
+
+Requirements for REAL product names:
+1. Names that actual brands use (like Apple, Samsung, Sony, etc.)
+2. Professional and market-ready
+3. Mix of strategies: descriptive, innovative, tech-inspired
+4. 1-4 words each
+5. No generic words like "Premium", "Professional", "Super"
+6. Industry-appropriate and authentic
+7. Names that would sell on real e-commerce platforms
+
+Think creatively but realistically. These should be names customers would recognize and trust.
+
+Return ONLY the names, one per line. No numbering, no explanations, no asterisks."""
+
+            response = ai_service.client.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a world-class product naming expert. You've named products for Fortune 500 companies. Generate authentic, market-ready product names that would actually succeed in real markets. NO templates, NO generic words, ONLY real creative names."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.9,
+                max_tokens=400
+            )
+            
+            content = response.choices[0].message.content
+            # Parse names from response - filter out markers and empty lines
+            product_names = [
+                line.strip() 
+                for line in content.split('\n') 
+                if line.strip() 
+                and len(line.strip()) < 70 
+                and not line.strip()[0].isdigit()
+                and line.strip() not in ['Here are', 'Here are some', 'Based', 'Creative', 'Realistic']
+            ]
+            product_names = product_names[:10]
+            
+        except Exception as e:
+            logger.error(f"Groq AI product name generation failed: {e}")
+            raise
+            
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_names = []
+            for name in product_names:
+                if name not in seen and name.strip():
+                    unique_names.append(name)
+                    seen.add(name)
+            product_names = unique_names[:10]
+            
+            if not product_names:
+                logger.error("Failed to generate any product names from AI")
+                return Response(
+                    {
+                        'error': 'Name Generation Failed',
+                        'message': 'AI could not generate valid product names. Try a different idea.',
+                        'success': False
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        return Response({
+            'success': True,
+            'type': 'product_names',
+            'idea': idea,
+            'message': f'Generated {len(product_names)} realistic product names',
+            'product_names': product_names,
+            'count': len(product_names)
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error in generate product names: {e}", exc_info=True)
+        return Response(
+            {
+                'error': 'Name generation failed',
                 'message': str(e),
                 'success': False
             },

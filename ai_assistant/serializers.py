@@ -319,3 +319,116 @@ class AutomatedStoreResponseSerializer(serializers.Serializer):
         child=serializers.CharField(),
         help_text="Suggested next steps"
     )
+
+
+# ============= Conversation Serializers =============
+
+class ConversationMessageSerializer(serializers.Serializer):
+    """Serializer for conversation messages"""
+    role = serializers.CharField(help_text="Message role: 'user', 'assistant', or 'system'")
+    content = serializers.CharField(help_text="Message content")
+    timestamp = serializers.DateTimeField(help_text="When the message was sent")
+    language = serializers.CharField(help_text="Language of the message")
+
+
+class ConversationSessionSerializer(serializers.Serializer):
+    """Serializer for conversation sessions"""
+    session_id = serializers.IntegerField(help_text="Session ID")
+    title = serializers.CharField(help_text="Session title")
+    language = serializers.CharField(help_text="Primary language")
+    message_count = serializers.IntegerField(help_text="Number of messages")
+    tokens_used = serializers.IntegerField(help_text="Total tokens used")
+    created_at = serializers.DateTimeField(help_text="When session was created")
+    updated_at = serializers.DateTimeField(help_text="When session was last updated")
+
+
+class CreateConversationSerializer(serializers.Serializer):
+    """Serializer for creating conversation"""
+    title = serializers.CharField(required=False, allow_blank=True, help_text="Conversation title")
+    language = serializers.CharField(default='en', help_text="Language code")
+
+
+class SendMessageSerializer(serializers.Serializer):
+    """Serializer for sending messages"""
+    message = serializers.CharField(help_text="User message")
+    language = serializers.CharField(required=False, help_text="Language (auto-detected if not provided)")
+
+
+# ============= Recommendation Serializers =============
+
+class RecommendationDataSerializer(serializers.Serializer):
+    """Serializer for recommendation data"""
+    title = serializers.CharField(help_text="Recommendation title")
+    description = serializers.CharField(help_text="Recommendation description")
+    reason = serializers.CharField(help_text="Why this is recommended")
+    confidence_score = serializers.FloatField(help_text="Confidence score 0-1")
+    url = serializers.CharField(required=False, help_text="URL to product/deal")
+
+
+class AIRecommendationSerializer(serializers.Serializer):
+    """Serializer for AI recommendations"""
+    recommendation_id = serializers.IntegerField(help_text="Recommendation ID")
+    type = serializers.CharField(help_text="Type of recommendation")
+    title = serializers.CharField(help_text="Recommendation title")
+    description = serializers.CharField(help_text="Recommendation description")
+    language = serializers.CharField(help_text="Language")
+    reason = serializers.CharField(help_text="Why recommended")
+    confidence_score = serializers.FloatField(help_text="Confidence 0-1")
+    data = serializers.JSONField(help_text="Additional data")
+    created_at = serializers.DateTimeField(help_text="When recommended")
+
+
+# ============= Web Search Serializers =============
+
+class SearchResultSerializer(serializers.Serializer):
+    """Serializer for web search results"""
+    title = serializers.CharField(help_text="Result title")
+    url = serializers.CharField(help_text="Result URL")
+    snippet = serializers.CharField(help_text="Search snippet")
+    source = serializers.CharField(help_text="Source type")
+
+
+class WebSearchResponseSerializer(serializers.Serializer):
+    """Serializer for web search response"""
+    success = serializers.BooleanField(help_text="Whether search succeeded")
+    query = serializers.CharField(help_text="Search query")
+    language = serializers.CharField(help_text="Search language")
+    result_count = serializers.IntegerField(help_text="Number of results")
+    results = SearchResultSerializer(many=True, help_text="Search results")
+
+
+# ============= Language Serializers =============
+
+class LanguageSerializer(serializers.Serializer):
+    """Serializer for language code and name"""
+    code = serializers.CharField(help_text="Language code")
+    name = serializers.CharField(help_text="Language name")
+
+
+class DetectTranslateSerializer(serializers.Serializer):
+    """Serializer for language detection and translation"""
+    text = serializers.CharField(help_text="Text to detect/translate")
+    target_language = serializers.CharField(default='en', help_text="Target language code")
+
+
+class DetectTranslateResponseSerializer(serializers.Serializer):
+    """Serializer for detect/translate response"""
+    success = serializers.BooleanField(help_text="Whether operation succeeded")
+    original_text = serializers.CharField(help_text="Original text")
+    detected_language = serializers.CharField(help_text="Detected language")
+    target_language = serializers.CharField(help_text="Target language")
+    translated_text = serializers.CharField(help_text="Translated text")
+
+
+# ============= Chat Response Serializer =============
+
+class ChatMessageSerializer(serializers.Serializer):
+    """Serializer for chat message response"""
+    success = serializers.BooleanField(help_text="Whether message succeeded")
+    message = serializers.CharField(help_text="AI response message")
+    language = serializers.CharField(help_text="Response language")
+    recommendations = AIRecommendationSerializer(many=True, help_text="Recommendations")
+    sources = SearchResultSerializer(many=True, help_text="Web search sources")
+    tokens_used = serializers.IntegerField(help_text="Tokens used")
+    processing_time = serializers.FloatField(help_text="Processing time in seconds")
+    session_id = serializers.IntegerField(help_text="Conversation session ID")

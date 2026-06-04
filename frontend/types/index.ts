@@ -130,7 +130,7 @@ export interface ProductAssistResponse {
   meta_title: string;
   meta_description: string;
   tokens_used?: number;
-  mode: 'openai' | 'mock';
+  mode: 'groq' | 'mock';
   processing_time?: number;
   success: boolean;
 }
@@ -156,7 +156,7 @@ export interface StoreGeneratorResponse {
     category: string;
   }>;
   tokens_used?: number;
-  mode: 'openai' | 'mock';
+  mode: 'groq' | 'mock';
   processing_time?: number;
   success: boolean;
 }
